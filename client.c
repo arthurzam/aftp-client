@@ -14,6 +14,7 @@
 #include <ctype.h>
 #include <string.h>
 #include "defenitions.h"
+#include "md5.h"
 
 #define DEFAULT_PORT 7777
 #define BUFFER_SERVER_SIZE 0x400 // = 1024
@@ -37,25 +38,12 @@ int main(int argc, char **argv)
     short msgCode;
     int len;
 
-    union {
-		struct {
-			char src[FILENAME_MAX];
-			char dst[FILENAME_MAX];
-			byte_t src_len;
-			byte_t dst_len;
-		} src_dst;
-		char path[FILENAME_MAX];
-		int i;
-		struct {
-			char username[USERNAME_LENGTH];
-			byte_t md5Password[16];
-		} login;
-	} tempData;
-
     if (argc > 1)
-    {
     	server_name = argv[1];
-    }
+
+    union {
+    	char str[0xFF];
+    } tempdata;
 
 #ifdef WIN32
     WSADATA wsaData;
@@ -103,17 +91,6 @@ int main(int argc, char **argv)
         goto _badExit;
     }
 
-
-
-    // Notice that nothing in this code is specific to whether we
-    // are using UDP or TCP.
-    // We achieve this by using a simple trick.
-    //    When connect() is called on a datagram socket, it does not
-    //    actually establish the connection as a stream (TCP) socket
-    //    would. Instead, TCP/IP establishes the remote half of the
-    //    (LocalIPAddress, LocalPort, RemoteIP, RemotePort) mapping.
-    //    This enables us to use send() and recv() on datagram sockets,
-    //    instead of recvfrom() and sendto()
     printf("Client: Client connecting to: %s.\n", hp->h_name);
     if (connect(sock, (struct sockaddr*)&server, sizeof(server)) == SOCKET_ERROR)
     {
@@ -134,10 +111,17 @@ int main(int argc, char **argv)
     	scanf("%hd", &msgCode);
     	switch (msgCode)
     	{
-    	case 100:
     	case 105:
     	case 0:
     		len = 0;
+    		break;
+    	case 100:
+    		printf("username: ");
+    		scanf("%s", Buffer + 16);
+    		printf("password: ");
+    		scanf("%s", tempdata.str);
+    		md5((byte_t*)tempdata.str, strlen(tempdata.str), Buffer);
+    		len = strlen(Buffer + 16) + 16;
     		break;
     	case 520:
     	case 521:

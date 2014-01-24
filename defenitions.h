@@ -21,6 +21,7 @@ typedef unsigned char byte_t;
 #ifdef WIN32
 typedef int from_len_t;
 #else
+#include <sys/socket.h>
 typedef socklen_t from_len_t;
 #endif
 
