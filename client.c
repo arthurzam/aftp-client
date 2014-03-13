@@ -111,6 +111,7 @@ int main(int argc, char **argv)
     	scanf("%hd", &msgCode);
     	switch (msgCode)
     	{
+    	case 500:
     	case 105:
     	case 0:
     		len = 0;
@@ -120,7 +121,7 @@ int main(int argc, char **argv)
     		scanf("%s", Buffer + 16);
     		printf("password: ");
     		scanf("%s", tempdata.str);
-    		md5((byte_t*)tempdata.str, strlen(tempdata.str), Buffer);
+    		md5((byte_t*)tempdata.str, strlen(tempdata.str), (byte_t*)Buffer);
     		len = strlen(Buffer + 16) + 16;
     		break;
     	case 520:
