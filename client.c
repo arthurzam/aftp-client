@@ -147,7 +147,7 @@ int main(int argc, char **argv)
             fprintf(stderr,"Client: send() failed.\n");
             goto _badExit;
         }
-        if(msgCode == 0)
+        if(msgCode == 0 || msgCode == 105)
         	return (0);
         retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0);
         if (retval == SOCKET_ERROR)
@@ -161,6 +161,32 @@ int main(int argc, char **argv)
             goto _badExit;
         }
         msgCode = getMsgCode(Buffer, retval);
+        if(msgCode == 900)
+        {
+            retval = sendMessage(200, NULL, 0);
+            if (retval == SOCKET_ERROR)
+            {
+                fprintf(stderr,"Client: send() failed.\n");
+                goto _badExit;
+            }
+            continue;
+        }
+        while(msgCode == 201)
+        {
+            retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0);
+            if (retval == SOCKET_ERROR)
+            {
+                fprintf(stderr,"Client: recv() failed.\n");
+#ifdef WIN32
+                closesocket(sock);
+#else
+                close(sock);
+#endif
+                goto _badExit;
+            }
+            msgCode = getMsgCode(Buffer, retval);
+            printf("%s", Buffer + sizeof(msgCode));
+        }
         Buffer[retval] = 0;
         printf("got this code: %8d, data: %s\n", msgCode, Buffer + sizeof(msgCode));
 
