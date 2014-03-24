@@ -43,6 +43,7 @@ int main(int argc, char **argv)
 
     union {
     	char str[0xFF];
+    	int i;
     } tempdata;
 
 #ifdef WIN32
@@ -160,8 +161,16 @@ int main(int argc, char **argv)
 #endif
             goto _badExit;
         }
-        msgCode = getMsgCode(Buffer, retval);
-        if(msgCode == 900)
+        tempdata.i = getMsgCode(Buffer, retval);
+        if(msgCode == 524 && tempdata.i == 200)
+        {
+        	printf("got this hash: ");
+        	for(tempdata.i = 2; tempdata.i < 18; tempdata.i++)
+        		printf("%02x", ((byte_t*)Buffer)[tempdata.i]);
+        	printf("\n");
+        	continue;
+        }
+        if(tempdata.i == 900)
         {
             retval = sendMessage(200, NULL, 0);
             if (retval == SOCKET_ERROR)
@@ -171,7 +180,7 @@ int main(int argc, char **argv)
             }
             continue;
         }
-        while(msgCode == 201)
+        while(tempdata.i == 201)
         {
             retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0);
             if (retval == SOCKET_ERROR)
@@ -184,11 +193,11 @@ int main(int argc, char **argv)
 #endif
                 goto _badExit;
             }
-            msgCode = getMsgCode(Buffer, retval);
+            tempdata.i = getMsgCode(Buffer, retval);
             printf("%s", Buffer + sizeof(msgCode));
         }
         Buffer[retval] = 0;
-        printf("got this code: %8d, data: %s\n", msgCode, Buffer + sizeof(msgCode));
+        printf("got this code: %8d, data: %s\n", tempdata.i, Buffer + sizeof(msgCode));
 
     }
 #ifdef WIN32
