@@ -180,6 +180,11 @@ int main(int argc, char* argv[])
 			goto _badExit;
 		}
 		tempdata.i = getMsgCode(Buffer, retval);
+		if(msgCode == 105)
+		{
+			printf("\nexitted");
+			break;
+		}
 		if(msgCode == 524 && tempdata.i == 200)
 		{
 			printf("got this hash: ");
