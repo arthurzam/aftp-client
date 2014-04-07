@@ -2,6 +2,7 @@
 *.slo
 *.lo
 *.o
+aftp_client*
 
 # Compiled Dynamic libraries
 *.so
