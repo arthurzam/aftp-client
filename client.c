@@ -179,6 +179,7 @@ int main(int argc, char* argv[])
 #endif
 			goto _badExit;
 		}
+		Buffer[retval] = 0;
 		tempdata.i = getMsgCode(Buffer, retval);
 		if(msgCode == 105)
 		{
@@ -205,6 +206,7 @@ int main(int argc, char* argv[])
 		}
 		while(tempdata.i == 201)
 		{
+			printf("%s", Buffer + sizeof(msgCode));
 			retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0);
 			if (retval == SOCKET_ERROR)
 			{
@@ -217,7 +219,6 @@ int main(int argc, char* argv[])
 				goto _badExit;
 			}
 			tempdata.i = getMsgCode(Buffer, retval);
-			printf("%s", Buffer + sizeof(msgCode));
 		}
 		Buffer[retval] = 0;
 		printf("\ngot this code: %8d, data: %s\n", tempdata.i, Buffer + sizeof(msgCode));
