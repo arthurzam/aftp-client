@@ -14,21 +14,21 @@ typedef struct md5_state_s {
 } md5_context;
 
 #ifdef __cplusplus
-extern "C" 
+extern "C"
 {
 #endif
 
-/* Initialize the algorithm. */
-void md5_init(md5_context *ctx);
+    /* Initialize the algorithm. */
+    void md5_init(md5_context *ctx);
 
-/* Append a string to the message. */
-void md5_append(md5_context *ctx, const byte_t *data, int nbytes);
+    /* Append a string to the message. */
+    void md5_append(md5_context *ctx, const byte_t *data, int nbytes);
 
-/* Finish the message and return the digest. */
-void md5_finish(md5_context *ctx, byte_t digest[16]);
+    /* Finish the message and return the digest. */
+    void md5_finish(md5_context *ctx, byte_t digest[16]);
 
-/* Calculate he whole md5 of the given data into digest */
-void md5(const void* data, int nbytes, byte_t digest[16]);
+    /* Calculate he whole md5 of the given data into digest */
+    void md5(const void* data, int nbytes, byte_t digest[16]);
 
 #ifdef __cplusplus
 }  /* end extern "C" */
