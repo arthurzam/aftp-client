@@ -23,6 +23,7 @@ SOCKET sock;
 
 int sendMessage(short msgCode, char* data, int datalen);
 short getMsgCode(char* data, unsigned int datalen);
+void uploadFile(FILE* file);
 
 int main(int argc, char* argv[])
 {
@@ -126,7 +127,7 @@ int main(int argc, char* argv[])
             md5((byte_t*)tempdata.str, strlen(tempdata.str), (byte_t*)Buffer);
             len = strlen(Buffer + 16) + 16;
             break;
-        case 510: // TODO: upload client
+        case 510:
             if(fileTemp)
                 fclose(fileTemp);
             printf("enter path to local file: ");
@@ -181,6 +182,10 @@ int main(int argc, char* argv[])
         }
         Buffer[retval] = 0;
         tempdata.i = getMsgCode(Buffer, retval);
+        if(msgCode == 510 && tempdata.i == 200)
+        {
+            uploadFile(fileTemp);
+        }
         if(msgCode == 105)
         {
             printf("\nexitted");
@@ -264,4 +269,53 @@ short getMsgCode(char* data, unsigned int datalen)
         return (-1);
     memcpy(&ret, data, sizeof(ret));
     return (ret);
+}
+
+void uploadFile(FILE* file)
+{
+    struct {
+        unsigned int blockNum;
+        unsigned short size;
+        byte_t md5Res[16];
+        byte_t dataFile[0x200];
+    } data;
+    char Buffer[BUFFER_SERVER_SIZE];
+    int blocksCount, i;
+    byte_t* blocks; // 1 - bad, 0 - good
+    md5_context ctx_all;
+    md5_init(&ctx_all);
+    md5_context ctx;
+    int flag = 1;
+    for(data.blockNum = 0; (data.size = fread(data.dataFile, 1, 0x200, file)); data.blockNum++)
+    {
+        md5_init(&ctx);
+        md5_append(&ctx, data.dataFile, data.size);
+        md5_append(&ctx_all, data.dataFile, data.size);
+        md5_finish(&ctx, data.md5Res);
+        sendMessage(210, (char*)&data, 32 + data.size);
+    }
+    blocksCount = data.blockNum;
+    blocks = (byte_t*)malloc(blocksCount);
+    memset(blocks, 1, blocksCount);
+    while(flag)
+    {
+        if(getMsgCode(Buffer, recv(sock, Buffer, BUFFER_SERVER_SIZE, 0)) == 200)
+        {
+            blocks[(int)*(Buffer + 2)] = 0;
+        }
+        else
+        {
+            data.blockNum = *(Buffer + 2);
+            fseek(file, data.blockNum * 0x200, SEEK_SET);
+            data.size = fread(data.dataFile, 1, 0x200, file);
+            md5_init(&ctx);
+            md5_append(&ctx, data.dataFile, data.size);
+            md5_finish(&ctx, data.md5Res);
+            sendMessage(210, (char*)&data, 32 + data.size);
+            flag = 1;
+        }
+        for(i = 0; flag && i < blocksCount; i++)
+            flag = flag || i;
+    }
+    free(blocks);
 }
