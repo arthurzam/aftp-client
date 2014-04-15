@@ -130,9 +130,12 @@ int main(int argc, char* argv[])
         case 510:
             if(fileTemp)
                 fclose(fileTemp);
-            printf("enter path to local file: ");
-            scanf("%s", tempdata.str);
-            fileTemp = fopen(tempdata.str, "rb");
+            while(!fileTemp)
+            {
+                printf("enter path to local file: ");
+                scanf("%s", tempdata.str);
+                fileTemp = fopen(tempdata.str, "rb");
+            }
             fseek(fileTemp, 0, SEEK_END);
             tempdata.l = ftell(fileTemp);
             fseek(fileTemp, 0, SEEK_SET);
@@ -184,7 +187,13 @@ int main(int argc, char* argv[])
         tempdata.i = getMsgCode(Buffer, retval);
         if(msgCode == 510 && tempdata.i == 200)
         {
-            uploadFile(fileTemp);
+            tempdata.i = 0;
+            while(tempdata.i != 200)
+            {
+                uploadFile(fileTemp);
+                retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0);
+                tempdata.i = getMsgCode(Buffer, retval);
+            }
         }
         if(msgCode == 105)
         {
@@ -314,8 +323,11 @@ void uploadFile(FILE* file)
             sendMessage(210, (char*)&data, 32 + data.size);
             flag = 1;
         }
-        for(i = 0; flag && i < blocksCount; i++)
-            flag = flag || i;
+        flag = 0;
+        for(i = 0; !flag && i < blocksCount; i++)
+            flag = flag || blocks[i]; // only if the whole array it 0 (we finished) than flag will be 0
     }
     free(blocks);
+    md5_finish(&ctx_all, data.md5Res);
+    sendMessage(211, (char*)data.md5Res, 16); // send files md5
 }
