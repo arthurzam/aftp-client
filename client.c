@@ -24,6 +24,7 @@ SOCKET sock;
 int sendMessage(short msgCode, char* data, int datalen);
 short getMsgCode(char* data, unsigned int datalen);
 void uploadFile(FILE* file);
+bool_t downloadFile(FILE* file, int blockCount);
 
 int main(int argc, char* argv[])
 {
@@ -145,6 +146,21 @@ int main(int argc, char* argv[])
             printf("enter remote path: ");
             scanf("%s", Buffer + 4);
             break;
+        case 511:
+            printf("enter remote path: ");
+            scanf("%s", Buffer);
+            if(fileTemp)
+            {
+                fclose(fileTemp);
+                fileTemp = NULL;
+            }
+            while(!fileTemp)
+            {
+                printf("enter path to local file: ");
+                scanf("%s", tempdata.str);
+                fileTemp = fopen(tempdata.str, "wb");
+            }
+            break;
         case 520:
         case 521:
         case 533:
@@ -195,12 +211,19 @@ int main(int argc, char* argv[])
                 tempdata.i = getMsgCode(Buffer, retval);
             }
         }
-        if(msgCode == 105)
+        else if(msgCode == 511 && tempdata.i == 200)
+        {
+            if(downloadFile(fileTemp, *((int*)(Buffer + 2))))
+                tempdata.i = 200;
+            else
+                tempdata.i = 300;
+        }
+        else if(msgCode == 105)
         {
             printf("\nexitted");
             break;
         }
-        if(msgCode == 524 && tempdata.i == 200)
+        else if(msgCode == 524 && tempdata.i == 200)
         {
             printf("got this hash: ");
             for(tempdata.i = 2; tempdata.i < 18; tempdata.i++)
@@ -208,7 +231,7 @@ int main(int argc, char* argv[])
             printf("\n");
             continue;
         }
-        if(tempdata.i == 900)
+        else if(tempdata.i == 900)
         {
             retval = sendMessage(200, NULL, 0);
             if (retval == SOCKET_ERROR)
@@ -274,7 +297,7 @@ int sendMessage(short msgCode, char* data, int datalen)
 short getMsgCode(char* data, unsigned int datalen)
 {
     short ret;
-    if(datalen < sizeof(ret))
+    if(datalen < sizeof(short))
         return (-1);
     memcpy(&ret, data, sizeof(ret));
     return (ret);
@@ -293,14 +316,11 @@ void uploadFile(FILE* file)
     byte_t* blocks; // 1 - bad, 0 - good
     md5_context ctx_all;
     md5_init(&ctx_all);
-    md5_context ctx;
     int flag = 1;
     for(data.blockNum = 0; (data.size = fread(data.dataFile, 1, 0x200, file)); data.blockNum++)
     {
-        md5_init(&ctx);
-        md5_append(&ctx, data.dataFile, data.size);
+        md5(data.dataFile, data.size, data.md5Res);
         md5_append(&ctx_all, data.dataFile, data.size);
-        md5_finish(&ctx, data.md5Res);
         sendMessage(210, (char*)&data, 32 + data.size);
     }
     blocksCount = data.blockNum;
@@ -311,23 +331,69 @@ void uploadFile(FILE* file)
         if(getMsgCode(Buffer, recv(sock, Buffer, BUFFER_SERVER_SIZE, 0)) == 200)
         {
             blocks[(int)*(Buffer + 2)] = 0;
+            flag = 0;
+            for(i = 0; !flag && i < blocksCount; i++)
+                flag = flag || blocks[i]; // only if the whole array it 0 (we finished) than flag will be 0
         }
         else
         {
             data.blockNum = *(Buffer + 2);
             fseek(file, data.blockNum * 0x200, SEEK_SET);
             data.size = fread(data.dataFile, 1, 0x200, file);
-            md5_init(&ctx);
-            md5_append(&ctx, data.dataFile, data.size);
-            md5_finish(&ctx, data.md5Res);
+            md5(data.dataFile, data.size, data.md5Res);
             sendMessage(210, (char*)&data, 32 + data.size);
-            flag = 1;
         }
-        flag = 0;
-        for(i = 0; !flag && i < blocksCount; i++)
-            flag = flag || blocks[i]; // only if the whole array it 0 (we finished) than flag will be 0
     }
     free(blocks);
     md5_finish(&ctx_all, data.md5Res);
     sendMessage(211, (char*)data.md5Res, 16); // send files md5
+}
+
+bool_t downloadFile(FILE* file, int blockCount)
+{
+    struct {
+        unsigned int blockNum;
+        unsigned short size;
+        byte_t md5Res[16];
+        byte_t dataFile[0x200];
+    } data;
+    char Buffer[BUFFER_SERVER_SIZE];
+    int range[2] = {0, blockCount};
+    sendMessage(212, (char*)range, 8);
+    int i;
+    byte_t* blocks = (byte_t*)malloc(blockCount); // 1 - bad, 0 - good
+    byte_t md5Res[MD5_RESULT_LENGTH];
+    md5_context ctx_all;
+    md5_init(&ctx_all);
+    int flag = 1;
+    while(flag)
+    {
+        i = recv(sock, &Buffer, sizeof(Buffer), 0);
+        memcpy(&data, Buffer + 2, i - 2);
+        md5(data.dataFile, data.size, md5Res);
+        if(memcmp(data.md5Res, md5Res, MD5_RESULT_LENGTH)) // not equal
+        {
+            sendMessage(213, (char*)&data.blockNum, sizeof(data.blockNum)); // ask for block
+        }
+        else
+        {
+            fseek(file, data.blockNum * 0x200, SEEK_SET);
+            i = fwrite(data.dataFile, 1, data.size, file);
+            if(blocks[data.blockNum])
+                md5_append(&ctx_all, data.dataFile, data.size);
+            blocks[data.blockNum] = 0;
+            flag = 0;
+            for(i = 0; !flag && i < blockCount; i++)
+                flag = flag || blocks[i]; // only if the whole array it 0 (we finished) than flag will be 0
+        }
+    }
+    sendMessage(214, NULL, 0);
+    i = recv(sock, &Buffer, sizeof(Buffer), 0);
+    if(getMsgCode(Buffer, i) == 212)
+    {
+        md5_finish(&ctx_all, md5Res);
+        if(!memcmp(Buffer + 2, md5Res, MD5_RESULT_LENGTH)) // equal
+            return (TRUE);
+    }
+    return (FALSE);
 }
