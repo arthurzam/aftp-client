@@ -24,7 +24,7 @@ SOCKET sock;
 int sendMessage(short msgCode, char* data, int datalen);
 short getMsgCode(char* data, unsigned int datalen);
 void uploadFile(FILE* file);
-bool_t downloadFile(FILE* file, int blockCount);
+void downloadFile(FILE* file, int blockCount);
 
 int main(int argc, char* argv[])
 {
@@ -203,20 +203,15 @@ int main(int argc, char* argv[])
         tempdata.i = getMsgCode(Buffer, retval);
         if(msgCode == 510 && tempdata.i == 200)
         {
-            tempdata.i = 0;
-            while(tempdata.i != 200)
-            {
-                uploadFile(fileTemp);
-                retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0);
-                tempdata.i = getMsgCode(Buffer, retval);
-            }
+            uploadFile(fileTemp);
+            retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0);
+            tempdata.i = getMsgCode(Buffer, retval);
         }
         else if(msgCode == 511 && tempdata.i == 200)
         {
-            if(downloadFile(fileTemp, *((int*)(Buffer + 2))))
-                tempdata.i = 200;
-            else
-                tempdata.i = 300;
+            downloadFile(fileTemp, *((int*)(Buffer + 2)));
+            retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0);
+            tempdata.i = getMsgCode(Buffer, retval);
         }
         else if(msgCode == 105)
         {
@@ -314,13 +309,10 @@ void uploadFile(FILE* file)
     char Buffer[BUFFER_SERVER_SIZE];
     int blocksCount, i;
     byte_t* blocks; // 1 - bad, 0 - good
-    md5_context ctx_all;
-    md5_init(&ctx_all);
     int flag = 1;
     for(data.blockNum = 0; (data.size = fread(data.dataFile, 1, 0x200, file)); data.blockNum++)
     {
         md5(data.dataFile, data.size, data.md5Res);
-        md5_append(&ctx_all, data.dataFile, data.size);
         sendMessage(210, (char*)&data, 32 + data.size);
     }
     blocksCount = data.blockNum;
@@ -345,11 +337,10 @@ void uploadFile(FILE* file)
         }
     }
     free(blocks);
-    md5_finish(&ctx_all, data.md5Res);
-    sendMessage(211, (char*)data.md5Res, 16); // send files md5
+    sendMessage(213, NULL, 0);
 }
 
-bool_t downloadFile(FILE* file, int blockCount)
+void downloadFile(FILE* file, int blockCount)
 {
     struct {
         unsigned int blockNum;
@@ -359,12 +350,10 @@ bool_t downloadFile(FILE* file, int blockCount)
     } data;
     char Buffer[BUFFER_SERVER_SIZE];
     int range[2] = {0, blockCount};
-    sendMessage(212, (char*)range, 8);
+    sendMessage(211, (char*)range, 8);
     int i;
     byte_t* blocks = (byte_t*)malloc(blockCount); // 1 - bad, 0 - good
     byte_t md5Res[MD5_RESULT_LENGTH];
-    md5_context ctx_all;
-    md5_init(&ctx_all);
     int flag = 1;
     while(flag)
     {
@@ -373,27 +362,18 @@ bool_t downloadFile(FILE* file, int blockCount)
         md5(data.dataFile, data.size, md5Res);
         if(memcmp(data.md5Res, md5Res, MD5_RESULT_LENGTH)) // not equal
         {
-            sendMessage(213, (char*)&data.blockNum, sizeof(data.blockNum)); // ask for block
+            sendMessage(212, (char*)&data.blockNum, sizeof(data.blockNum)); // ask for block
         }
         else
         {
             fseek(file, data.blockNum * 0x200, SEEK_SET);
             i = fwrite(data.dataFile, 1, data.size, file);
-            if(blocks[data.blockNum])
-                md5_append(&ctx_all, data.dataFile, data.size);
             blocks[data.blockNum] = 0;
             flag = 0;
             for(i = 0; !flag && i < blockCount; i++)
                 flag = flag || blocks[i]; // only if the whole array it 0 (we finished) than flag will be 0
         }
     }
-    sendMessage(214, NULL, 0);
-    i = recv(sock, &Buffer, sizeof(Buffer), 0);
-    if(getMsgCode(Buffer, i) == 212)
-    {
-        md5_finish(&ctx_all, md5Res);
-        if(!memcmp(Buffer + 2, md5Res, MD5_RESULT_LENGTH)) // equal
-            return (TRUE);
-    }
-    return (FALSE);
+
+    sendMessage(213, NULL, 0);
 }
