@@ -46,7 +46,7 @@ int main(int argc, char* argv[])
 
     union {
         char str[0xFF];
-        long l;
+        unsigned long long int l;
         int i;
     } tempdata;
 
@@ -224,6 +224,17 @@ int main(int argc, char* argv[])
             for(tempdata.i = 2; tempdata.i < 18; tempdata.i++)
                 printf("%02x", ((byte_t*)Buffer)[tempdata.i]);
             printf("\n");
+            continue;
+        }
+        else if(msgCode == 523 && tempdata.i == 200)
+        {
+
+            tempdata.l = *((unsigned long long int*)(Buffer + 2));
+#ifdef WIN32
+            printf("File size is %I64u\n", tempdata.l);
+#else
+            printf("File size is %llu\n", tempdata.l);
+#endif
             continue;
         }
         else if(tempdata.i == 900)
