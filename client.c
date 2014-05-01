@@ -117,7 +117,6 @@ int main(int argc, char* argv[])
         {
         case 500:
         case 105:
-        case 0:
             len = 0;
             break;
         case 100:
@@ -186,8 +185,6 @@ int main(int argc, char* argv[])
             fprintf(stderr,"Client: send() failed.\n");
             goto _badExit;
         }
-        if(msgCode == 0)
-            return (0);
         retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0);
         if (retval == SOCKET_ERROR)
         {
@@ -201,28 +198,29 @@ int main(int argc, char* argv[])
         }
         Buffer[retval] = 0;
         tempdata.i = getMsgCode(Buffer, retval);
-        if(msgCode == 510 && tempdata.i == 200)
+        if(msgCode == 510 || msgCode == 511)
         {
-            uploadFile(fileTemp);
-            retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0);
-            tempdata.i = getMsgCode(Buffer, retval);
-        }
-        else if(msgCode == 511 && tempdata.i == 200)
-        {
-            downloadFile(fileTemp, *((int*)(Buffer + 2)));
-            retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0);
-            tempdata.i = getMsgCode(Buffer, retval);
+            if(tempdata.i == 200)
+            {
+                if(msgCode == 510)
+                    uploadFile(fileTemp);
+                else
+                    downloadFile(fileTemp, *((int*)(Buffer + 2)));
+                retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0);
+                tempdata.i = getMsgCode(Buffer, retval);
+            }
+            fclose(fileTemp);
+            fileTemp = NULL;
         }
         else if(msgCode == 105)
         {
-            printf("\nexitted");
             break;
         }
         else if(msgCode == 524 && tempdata.i == 200)
         {
             printf("got this hash: ");
             for(tempdata.i = 2; tempdata.i < 18; tempdata.i++)
-                printf("%02x", ((byte_t*)Buffer)[tempdata.i]);
+                printf("%02X", ((byte_t*)Buffer)[tempdata.i]);
             printf("\n");
             continue;
         }
@@ -264,7 +262,7 @@ int main(int argc, char* argv[])
             tempdata.i = getMsgCode(Buffer, retval);
         }
         Buffer[retval] = 0;
-        printf("\ngot this code: %8d, data: %s\n", tempdata.i, Buffer + sizeof(msgCode));
+        printf("\ngot this code: %5d, data: %s\n", tempdata.i, Buffer + sizeof(msgCode));
     }
 #ifdef WIN32
     closesocket(sock);
@@ -272,7 +270,6 @@ int main(int argc, char* argv[])
 #else
     close(sock);
 #endif
-    printf("excellent exit\n");
     return (0);
 
 _badExit:
