@@ -17,6 +17,7 @@
 #include "md5.h"
 
 #define DEFAULT_PORT 7777
+#define DEFAULT_HOST "localhost"
 #define BUFFER_SERVER_SIZE 0x400 // = 1024
 
 SOCKET sock;
@@ -31,10 +32,13 @@ int main(int argc, char* argv[])
     srand(time(NULL));
     char Buffer[BUFFER_SERVER_SIZE + 150];
     // default to localhost
-    char *server_name= "localhost";
+    char* server_name = DEFAULT_HOST;
+    if(argc > 1)
+        server_name = argv[1];
     unsigned short port = DEFAULT_PORT;
+    if(argc > 2)
+        port = (atoi(argv[2]) & 0xFFFF);
     int retval;
-    unsigned int addr;
     struct sockaddr_in server;
     struct hostent *hp;
     short msgCode;
@@ -59,30 +63,28 @@ int main(int argc, char* argv[])
     }
 #endif
 
+    memset(&server, 0, sizeof(server));
     // Attempt to detect if we should call gethostbyname() or gethostbyaddr()
     if (isalpha(server_name[0]))
     {   // server address is a name
         hp = gethostbyname(server_name);
+        if (hp == NULL )
+        {
+#ifdef WIN32
+            fprintf(stderr,"Client: Cannot resolve address \"%s\": Error %d\n", server_name, WSAGetLastError());
+#else
+            fprintf(stderr,"Client: Cannot resolve address \"%s\"\n", server_name);
+#endif
+            goto _badExit;
+        }
+        memcpy(&(server.sin_addr), hp->h_addr, hp->h_length);
     }
     else
     {   // Convert nnn.nnn address to a usable one
-        addr = inet_addr(server_name);
-        hp = gethostbyaddr((char *)&addr, 4, AF_INET);
-    }
-    if (hp == NULL )
-    {
-#ifdef WIN32
-        fprintf(stderr,"Client: Cannot resolve address \"%s\": Error %d\n", server_name, WSAGetLastError());
-#else
-        fprintf(stderr,"Client: Cannot resolve address \"%s\"\n", server_name);
-#endif
-        goto _badExit;
+        inet_aton(server_name, &server.sin_addr);
     }
 
-    // Copy the resolved information into the sockaddr_in structure
-    memset(&server, 0, sizeof(server));
-    memcpy(&(server.sin_addr), hp->h_addr, hp->h_length);
-    server.sin_family = hp->h_addrtype;
+    server.sin_family = AF_INET;
     server.sin_port = htons(port);
     sock = socket(AF_INET, SOCK_DGRAM, 0); /* Open a socket */
 
@@ -96,7 +98,7 @@ int main(int argc, char* argv[])
         goto _badExit;
     }
 
-    printf("Client: Client connecting to: %s.\n", hp->h_name);
+    printf("Client: Client connecting to: %s\n", server_name);
     if (connect(sock, (struct sockaddr*)&server, sizeof(server)) == SOCKET_ERROR)
     {
 #ifdef WIN32
