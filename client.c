@@ -1,4 +1,5 @@
 #ifdef WIN32
+#include <windows.h>
 #include <winsock2.h>
 #else
 #include <arpa/inet.h>
@@ -81,7 +82,11 @@ int main(int argc, char* argv[])
     }
     else
     {   // Convert nnn.nnn address to a usable one
+#ifdef WIN32	
+        server.sin_addr.S_un.S_addr = inet_addr(server_name);
+#else
         inet_aton(server_name, &server.sin_addr);
+#endif
     }
 
     server.sin_family = AF_INET;
