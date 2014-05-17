@@ -124,6 +124,7 @@ int main(int argc, char* argv[])
         {
         case 500:
         case 105:
+        case 536:
             len = 0;
             break;
         case 100:
@@ -372,7 +373,7 @@ void downloadFile(FILE* file, int blockCount)
     int flag = 1;
     while(flag)
     {
-        i = recv(sock, &Buffer, sizeof(Buffer), 0);
+        i = recv(sock, (char*)&Buffer, sizeof(Buffer), 0);
         memcpy(&data, Buffer + 2, i - 2);
         md5(data.dataFile, data.size, md5Res);
         if(memcmp(data.md5Res, md5Res, MD5_RESULT_LENGTH)) // not equal
