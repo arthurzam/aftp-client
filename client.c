@@ -14,8 +14,8 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
+#include <openssl/md5.h>
 #include "defenitions.h"
-#include "md5.h"
 
 #define DEFAULT_PORT 7777
 #define DEFAULT_HOST "localhost"
@@ -130,7 +130,7 @@ int main(int argc, char* argv[])
             scanf("%s", Buffer + 16);
             printf("password: ");
             scanf("%s", tempdata.str);
-            md5(tempdata.str, strlen(tempdata.str), (uint8_t*)Buffer);
+            MD5((uint8_t*)tempdata.str, strlen(tempdata.str), (uint8_t*)Buffer);
             len = strlen(Buffer + 16) + 16;
             break;
         case 510:
@@ -316,7 +316,7 @@ void uploadFile(FILE* file)
     int flag = 1;
     for(data.blockNum = 0; (data.size = fread(data.dataFile, 1, 0x200, file)); data.blockNum++)
     {
-        md5(data.dataFile, data.size, data.md5Res);
+        MD5(data.dataFile, data.size, data.md5Res);
         sendMessage(210, (char*)&data, 32 + data.size);
     }
     blocksCount = data.blockNum;
@@ -336,7 +336,7 @@ void uploadFile(FILE* file)
             data.blockNum = *(Buffer + 2);
             fseek(file, data.blockNum * 0x200, SEEK_SET);
             data.size = fread(data.dataFile, 1, 0x200, file);
-            md5(data.dataFile, data.size, data.md5Res);
+            MD5(data.dataFile, data.size, data.md5Res);
             sendMessage(210, (char*)&data, 32 + data.size);
         }
     }
@@ -357,14 +357,14 @@ void downloadFile(FILE* file, int blockCount)
     sendMessage(211, (char*)range, 8);
     int i;
     uint8_t* blocks = (uint8_t*)malloc(blockCount); // 1 - bad, 0 - good
-    uint8_t md5Res[MD5_RESULT_LENGTH];
+    uint8_t md5Res[MD5_DIGEST_LENGTH];
     int flag = 1;
     while(flag)
     {
         i = recv(sock, (char*)&Buffer, sizeof(Buffer), 0);
         memcpy(&data, Buffer + 2, i - 2);
-        md5(data.dataFile, data.size, md5Res);
-        if(memcmp(data.md5Res, md5Res, MD5_RESULT_LENGTH)) // not equal
+        MD5(data.dataFile, data.size, md5Res);
+        if(memcmp(data.md5Res, md5Res, MD5_DIGEST_LENGTH)) // not equal
         {
             sendMessage(212, (char*)&data.blockNum, sizeof(data.blockNum)); // ask for block
         }
