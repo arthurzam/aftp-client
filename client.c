@@ -32,8 +32,7 @@ int main(int argc, char* argv[])
 {
     srand(time(NULL));
     char Buffer[BUFFER_SERVER_SIZE + 150];
-    // default to localhost
-    char* server_name = DEFAULT_HOST;
+    char* server_name = DEFAULT_HOST; // default to localhost
     if(argc > 1)
         server_name = argv[1];
     unsigned short port = DEFAULT_PORT;
@@ -65,7 +64,6 @@ int main(int argc, char* argv[])
 #endif
 
     memset(&server, 0, sizeof(server));
-    // Attempt to detect if we should call gethostbyname() or gethostbyaddr()
     if (isalpha(server_name[0]))
     {   // server address is a name
         hp = gethostbyname(server_name);
@@ -81,7 +79,7 @@ int main(int argc, char* argv[])
         memcpy(&(server.sin_addr), hp->h_addr, hp->h_length);
     }
     else
-    {   // Convert nnn.nnn address to a usable one
+    {   // Convert IP address to a usable one
 #ifdef WIN32	
         server.sin_addr.S_un.S_addr = inet_addr(server_name);
 #else
@@ -91,7 +89,7 @@ int main(int argc, char* argv[])
 
     server.sin_family = AF_INET;
     server.sin_port = htons(port);
-    sock = socket(AF_INET, SOCK_DGRAM, 0); /* Open a socket */
+    sock = socket(AF_INET, SOCK_DGRAM, 0);
 
     if (sock <0 )
     {
@@ -116,7 +114,7 @@ int main(int argc, char* argv[])
     else
         printf("Client: connect() is OK.\n");
 
-    while(1)
+    while(true)
     {
         printf("enter msg code in dec mode:");
         scanf("%hd", &msgCode);
@@ -132,7 +130,7 @@ int main(int argc, char* argv[])
             scanf("%s", Buffer + 16);
             printf("password: ");
             scanf("%s", tempdata.str);
-            md5((byte_t*)tempdata.str, strlen(tempdata.str), (byte_t*)Buffer);
+            md5(tempdata.str, strlen(tempdata.str), (uint8_t*)Buffer);
             len = strlen(Buffer + 16) + 16;
             break;
         case 510:
@@ -197,11 +195,7 @@ int main(int argc, char* argv[])
         if (retval == SOCKET_ERROR)
         {
             fprintf(stderr,"Client: recv() failed.\n");
-#ifdef WIN32
             closesocket(sock);
-#else
-            close(sock);
-#endif
             goto _badExit;
         }
         Buffer[retval] = 0;
@@ -228,7 +222,7 @@ int main(int argc, char* argv[])
         {
             printf("got this hash: ");
             for(tempdata.i = 2; tempdata.i < 18; tempdata.i++)
-                printf("%02X", ((byte_t*)Buffer)[tempdata.i]);
+                printf("%02X", ((uint8_t*)Buffer)[tempdata.i]);
             printf("\n");
             continue;
         }
@@ -260,11 +254,7 @@ int main(int argc, char* argv[])
             if (retval == SOCKET_ERROR)
             {
                 fprintf(stderr,"Client: recv() failed.\n");
-#ifdef WIN32
                 closesocket(sock);
-#else
-                close(sock);
-#endif
                 goto _badExit;
             }
             tempdata.i = getMsgCode(Buffer, retval);
@@ -272,11 +262,9 @@ int main(int argc, char* argv[])
         Buffer[retval] = 0;
         printf("\ngot this code: %5d, data: %s\n", tempdata.i, Buffer + sizeof(msgCode));
     }
-#ifdef WIN32
     closesocket(sock);
+#ifdef WIN32
     WSACleanup();
-#else
-    close(sock);
 #endif
     return (0);
 
@@ -289,7 +277,7 @@ _badExit:
 
 int sendMessage(short msgCode, char* data, int datalen)
 {
-    static bool_t lockSend = FALSE; // mini mutex
+    static bool lockSend = false; // mini mutex
 
     char buffer[BUFFER_SERVER_SIZE + 5];
     memcpy(buffer, &msgCode, 2);
@@ -299,9 +287,9 @@ int sendMessage(short msgCode, char* data, int datalen)
         memcpy(buffer + 2, data, datalen);
 
     while (lockSend) ;
-    lockSend = TRUE;
+    lockSend = true;
     int retVal = send(sock, buffer, datalen + sizeof(msgCode), 0);
-    lockSend = FALSE;
+    lockSend = false;
     return (retVal);
 }
 
@@ -319,12 +307,12 @@ void uploadFile(FILE* file)
     struct {
         unsigned int blockNum;
         unsigned short size;
-        byte_t md5Res[16];
-        byte_t dataFile[0x200];
+        uint8_t md5Res[16];
+        uint8_t dataFile[0x200];
     } data;
     char Buffer[BUFFER_SERVER_SIZE];
     int blocksCount, i;
-    byte_t* blocks; // 1 - bad, 0 - good
+    uint8_t* blocks; // 1 - bad, 0 - good
     int flag = 1;
     for(data.blockNum = 0; (data.size = fread(data.dataFile, 1, 0x200, file)); data.blockNum++)
     {
@@ -332,7 +320,7 @@ void uploadFile(FILE* file)
         sendMessage(210, (char*)&data, 32 + data.size);
     }
     blocksCount = data.blockNum;
-    blocks = (byte_t*)malloc(blocksCount);
+    blocks = (uint8_t*)malloc(blocksCount);
     memset(blocks, 1, blocksCount);
     while(flag)
     {
@@ -361,15 +349,15 @@ void downloadFile(FILE* file, int blockCount)
     struct {
         unsigned int blockNum;
         unsigned short size;
-        byte_t md5Res[16];
-        byte_t dataFile[0x200];
+        uint8_t md5Res[16];
+        uint8_t dataFile[0x200];
     } data;
     char Buffer[BUFFER_SERVER_SIZE];
     int range[2] = {0, blockCount};
     sendMessage(211, (char*)range, 8);
     int i;
-    byte_t* blocks = (byte_t*)malloc(blockCount); // 1 - bad, 0 - good
-    byte_t md5Res[MD5_RESULT_LENGTH];
+    uint8_t* blocks = (uint8_t*)malloc(blockCount); // 1 - bad, 0 - good
+    uint8_t md5Res[MD5_RESULT_LENGTH];
     int flag = 1;
     while(flag)
     {
