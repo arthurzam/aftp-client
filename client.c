@@ -185,14 +185,12 @@ int main(int argc, char* argv[])
             len = strlen(Buffer);
             break;
         }
-        retval = sendMessage(msgCode, Buffer, len);
-        if (retval == SOCKET_ERROR)
+        if (sendMessage(msgCode, Buffer, len) == SOCKET_ERROR)
         {
             fprintf(stderr,"Client: send() failed.\n");
             goto _badExit;
         }
-        retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0);
-        if (retval == SOCKET_ERROR)
+        if ((retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0)) == SOCKET_ERROR)
         {
             fprintf(stderr,"Client: recv() failed.\n");
             closesocket(sock);
@@ -239,10 +237,15 @@ int main(int argc, char* argv[])
         }
         else if(tempdata.i == 900)
         {
-            retval = sendMessage(200, NULL, 0);
-            if (retval == SOCKET_ERROR)
+            if ((retval = sendMessage(200, NULL, 0)) == SOCKET_ERROR)
             {
                 fprintf(stderr,"Client: send() failed.\n");
+                goto _badExit;
+            }
+            if ((retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0)) == SOCKET_ERROR)
+            {
+                fprintf(stderr,"Client: recv() failed.\n");
+                closesocket(sock);
                 goto _badExit;
             }
             continue;
@@ -250,8 +253,7 @@ int main(int argc, char* argv[])
         while(tempdata.i == 201)
         {
             printf("%s", Buffer + sizeof(msgCode));
-            retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0);
-            if (retval == SOCKET_ERROR)
+            if ((retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0)) == SOCKET_ERROR)
             {
                 fprintf(stderr,"Client: recv() failed.\n");
                 closesocket(sock);
