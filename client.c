@@ -50,7 +50,7 @@ int main(int argc, char* argv[])
 
     union {
         char str[0xFF];
-        unsigned long long int l;
+        uint64_t l;
         int i;
     } tempdata;
 
@@ -145,9 +145,9 @@ int main(int argc, char* argv[])
             fseek(fileTemp, 0, SEEK_END);
             tempdata.l = ftell(fileTemp);
             fseek(fileTemp, 0, SEEK_SET);
-            *(int*)(Buffer) = (tempdata.l / 0x200);
+            *(int*)(Buffer) = htonl((tempdata.l / 0x200));
             if(*(int*)(Buffer) * 0x200 < tempdata.l)
-                *(int*)(Buffer) = 1 + *(int*)(Buffer);
+                *(int*)(Buffer) = htonl(1 + *(int*)(Buffer));
             printf("enter remote path: ");
             scanf("%s", Buffer + 4);
             break;
@@ -205,7 +205,7 @@ int main(int argc, char* argv[])
                 if(msgCode == 510)
                     uploadFile(fileTemp);
                 else
-                    downloadFile(fileTemp, *((int*)(Buffer + 2)));
+                    downloadFile(fileTemp, ntohl(*((int*)(Buffer + 2))));
                 retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0);
                 tempdata.i = getMsgCode(Buffer, retval);
             }
@@ -226,8 +226,8 @@ int main(int argc, char* argv[])
         }
         else if(msgCode == 523 && tempdata.i == 200)
         {
-
-            tempdata.l = *((unsigned long long int*)(Buffer + 2));
+            // TODO: fix uint64_t endian
+            tempdata.l = *((uint64_t*)(Buffer + 2));
 #ifdef WIN32
             printf("File size is %I64u\n", tempdata.l);
 #else
@@ -282,6 +282,7 @@ int sendMessage(short msgCode, char* data, int datalen)
     static bool lockSend = false; // mini mutex
 
     char buffer[BUFFER_SERVER_SIZE + 5];
+    msgCode = htons(msgCode);
     memcpy(buffer, &msgCode, 2);
     if(datalen > BUFFER_SERVER_SIZE)
         datalen = BUFFER_SERVER_SIZE;
@@ -301,14 +302,15 @@ short getMsgCode(char* data, unsigned int datalen)
     if(datalen < sizeof(short))
         return (-1);
     memcpy(&ret, data, sizeof(ret));
+    ret = ntohs(ret);
     return (ret);
 }
 
 void uploadFile(FILE* file)
 {
     struct {
-        unsigned int blockNum;
-        unsigned short size;
+        uint32_t blockNum;
+        uint16_t size;
         uint8_t md5Res[16];
         uint8_t dataFile[0x200];
     } data;
@@ -319,7 +321,10 @@ void uploadFile(FILE* file)
     for(data.blockNum = 0; (data.size = fread(data.dataFile, 1, 0x200, file)); data.blockNum++)
     {
         MD5(data.dataFile, data.size, data.md5Res);
+        data.blockNum = htonl(data.blockNum);
+        data.size = htons(data.size);
         sendMessage(210, (char*)&data, 32 + data.size);
+        data.blockNum = ntohl(data.blockNum);
     }
     blocksCount = data.blockNum;
     blocks = (uint8_t*)malloc(blocksCount);
@@ -339,7 +344,11 @@ void uploadFile(FILE* file)
             fseek(file, data.blockNum * 0x200, SEEK_SET);
             data.size = fread(data.dataFile, 1, 0x200, file);
             MD5(data.dataFile, data.size, data.md5Res);
+
+            data.blockNum = htonl(data.blockNum);
+            data.size = htons(data.size);
             sendMessage(210, (char*)&data, 32 + data.size);
+            data.blockNum = ntohl(data.blockNum);
         }
     }
     free(blocks);
@@ -349,8 +358,8 @@ void uploadFile(FILE* file)
 void downloadFile(FILE* file, int blockCount)
 {
     struct {
-        unsigned int blockNum;
-        unsigned short size;
+        uint32_t blockNum;
+        uint16_t size;
         uint8_t md5Res[16];
         uint8_t dataFile[0x200];
     } data;
@@ -365,9 +374,12 @@ void downloadFile(FILE* file, int blockCount)
     {
         i = recv(sock, (char*)&Buffer, sizeof(Buffer), 0);
         memcpy(&data, Buffer + 2, i - 2);
+        data.blockNum = ntohl(data.blockNum);
+        data.size = ntohs(data.size);
         MD5(data.dataFile, data.size, md5Res);
         if(memcmp(data.md5Res, md5Res, MD5_DIGEST_LENGTH)) // not equal
         {
+            data.blockNum = htonl(data.blockNum);
             sendMessage(212, (char*)&data.blockNum, sizeof(data.blockNum)); // ask for block
         }
         else
