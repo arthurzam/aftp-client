@@ -16,6 +16,7 @@
 #include <string.h>
 #include <openssl/md5.h>
 #include "defenitions.h"
+#include "messages.h"
 
 #define DEFAULT_PORT 7777
 #define DEFAULT_HOST "localhost"
@@ -120,12 +121,12 @@ int main(int argc, char* argv[])
         scanf("%hd", &msgCode);
         switch (msgCode)
         {
-        case 500:
-        case 105:
-        case 536:
+        case CLIENT_MSG::SERVER_INFO:
+        case CLIENT_MSG::LOGOUT:
+        case CLIENT_MSG::DIR_PWD:
             len = 0;
             break;
-        case 100:
+        case CLIENT_MSG::LOGIN:
             printf("username: ");
             scanf("%s", Buffer + 16);
             printf("password: ");
@@ -133,7 +134,7 @@ int main(int argc, char* argv[])
             MD5((uint8_t*)tempdata.str, strlen(tempdata.str), (uint8_t*)Buffer);
             len = strlen(Buffer + 16) + 16;
             break;
-        case 510:
+        case CLIENT_MSG::FILE_UPLOAD:
             if(fileTemp)
                 fclose(fileTemp);
             while(!fileTemp)
@@ -151,7 +152,7 @@ int main(int argc, char* argv[])
             printf("enter remote path: ");
             scanf("%s", Buffer + 4);
             break;
-        case 511:
+        case CLIENT_MSG::FILE_DOWNLOAD:
             printf("enter remote path: ");
             scanf("%s", Buffer);
             if(fileTemp)
@@ -166,10 +167,10 @@ int main(int argc, char* argv[])
                 fileTemp = fopen(tempdata.str, "wb");
             }
             break;
-        case 520:
-        case 521:
-        case 533:
-        case 534:
+        case CLIENT_MSG::FILE_MOVE:
+        case CLIENT_MSG::FILE_COPY:
+        case CLIENT_MSG::DIR_MOVE:
+        case CLIENT_MSG::DIR_COPY:
             printf("enter source relative path: ");
             scanf("%s", Buffer + 1); // src
             *Buffer = strlen(Buffer + 1) & 0xFF; // src_len
@@ -198,11 +199,11 @@ int main(int argc, char* argv[])
         }
         Buffer[retval] = 0;
         tempdata.i = getMsgCode(Buffer, retval);
-        if(msgCode == 510 || msgCode == 511)
+        if(msgCode == CLIENT_MSG::FILE_DOWNLOAD || msgCode == CLIENT_MSG::FILE_UPLOAD)
         {
-            if(tempdata.i == 200)
+            if(tempdata.i == SERVER_MSG::ACTION_COMPLETED)
             {
-                if(msgCode == 510)
+                if(msgCode == CLIENT_MSG::FILE_UPLOAD)
                     uploadFile(fileTemp);
                 else
                     downloadFile(fileTemp, ntohl(*((int*)(Buffer + 2))));
@@ -212,11 +213,11 @@ int main(int argc, char* argv[])
             fclose(fileTemp);
             fileTemp = NULL;
         }
-        else if(msgCode == 105)
+        else if(msgCode == CLIENT_MSG::LOGOUT)
         {
             break;
         }
-        else if(msgCode == 524 && tempdata.i == 200)
+        else if(msgCode == CLIENT_MSG::FILE_MD5 && tempdata.i == SERVER_MSG::ACTION_COMPLETED)
         {
             printf("got this hash: ");
             for(tempdata.i = 2; tempdata.i < 18; tempdata.i++)
@@ -224,7 +225,7 @@ int main(int argc, char* argv[])
             printf("\n");
             continue;
         }
-        else if(msgCode == 523 && tempdata.i == 200)
+        else if(msgCode == CLIENT_MSG::FILE_SIZE && tempdata.i == SERVER_MSG::ACTION_COMPLETED)
         {
             // TODO: fix uint64_t endian
             tempdata.l = *((uint64_t*)(Buffer + 2));
@@ -235,9 +236,9 @@ int main(int argc, char* argv[])
 #endif
             continue;
         }
-        else if(tempdata.i == 900)
+        else if(tempdata.i == SERVER_MSG::TIMEOUT)
         {
-            if ((retval = sendMessage(200, NULL, 0)) == SOCKET_ERROR)
+            if ((retval = sendMessage(CLIENT_MSG::EMPTY_MESSAGE, NULL, 0)) == SOCKET_ERROR)
             {
                 fprintf(stderr,"Client: send() failed.\n");
                 goto _badExit;
@@ -250,7 +251,7 @@ int main(int argc, char* argv[])
             }
             continue;
         }
-        while(tempdata.i == 201)
+        while(tempdata.i == SERVER_MSG::LS_DATA)
         {
             printf("%s", Buffer + sizeof(msgCode));
             if ((retval = recv(sock, Buffer, BUFFER_SERVER_SIZE, 0)) == SOCKET_ERROR)
@@ -323,7 +324,7 @@ void uploadFile(FILE* file)
         MD5(data.dataFile, data.size, data.md5Res);
         data.blockNum = htonl(data.blockNum);
         data.size = htons(data.size);
-        sendMessage(210, (char*)&data, 32 + data.size);
+        sendMessage(CLIENT_MSG::FILE_BLOCK, (char*)&data, 32 + data.size);
         data.blockNum = ntohl(data.blockNum);
     }
     blocksCount = data.blockNum;
@@ -331,12 +332,12 @@ void uploadFile(FILE* file)
     memset(blocks, 1, blocksCount);
     while(flag)
     {
-        if(getMsgCode(Buffer, recv(sock, Buffer, BUFFER_SERVER_SIZE, 0)) == 200)
+        if(getMsgCode(Buffer, recv(sock, Buffer, BUFFER_SERVER_SIZE, 0)) == SERVER_MSG::ACTION_COMPLETED)
         {
             blocks[(int)*(Buffer + 2)] = 0;
             flag = 0;
             for(i = 0; !flag && i < blocksCount; i++)
-                flag = flag || blocks[i]; // only if the whole array it 0 (we finished) than flag will be 0
+                flag |= blocks[i]; // only if the whole array it 0 (we finished) than flag will be 0
         }
         else
         {
@@ -347,12 +348,12 @@ void uploadFile(FILE* file)
 
             data.blockNum = htonl(data.blockNum);
             data.size = htons(data.size);
-            sendMessage(210, (char*)&data, 32 + data.size);
+            sendMessage(CLIENT_MSG::FILE_BLOCK, (char*)&data, 32 + data.size);
             data.blockNum = ntohl(data.blockNum);
         }
     }
     free(blocks);
-    sendMessage(213, NULL, 0);
+    sendMessage(CLIENT_MSG::CANCEL_FILE_TRANSFER, NULL, 0);
 }
 
 void downloadFile(FILE* file, int blockCount)
@@ -365,7 +366,7 @@ void downloadFile(FILE* file, int blockCount)
     } data;
     char Buffer[BUFFER_SERVER_SIZE];
     int range[2] = {0, blockCount};
-    sendMessage(211, (char*)range, 8);
+    sendMessage(CLIENT_MSG::ASK_BLOCK_RANGE, (char*)range, 8);
     int i;
     uint8_t* blocks = (uint8_t*)malloc(blockCount); // 1 - bad, 0 - good
     uint8_t md5Res[MD5_DIGEST_LENGTH];
@@ -380,7 +381,7 @@ void downloadFile(FILE* file, int blockCount)
         if(memcmp(data.md5Res, md5Res, MD5_DIGEST_LENGTH)) // not equal
         {
             data.blockNum = htonl(data.blockNum);
-            sendMessage(212, (char*)&data.blockNum, sizeof(data.blockNum)); // ask for block
+            sendMessage(CLIENT_MSG::ASK_BLOCK, (char*)&data.blockNum, sizeof(data.blockNum)); // ask for block
         }
         else
         {
@@ -389,9 +390,9 @@ void downloadFile(FILE* file, int blockCount)
             blocks[data.blockNum] = 0;
             flag = 0;
             for(i = 0; !flag && i < blockCount; i++)
-                flag = flag || blocks[i]; // only if the whole array it 0 (we finished) than flag will be 0
+                flag |= blocks[i]; // only if the whole array it 0 (we finished) than flag will be 0
         }
     }
 
-    sendMessage(213, NULL, 0);
+    sendMessage(CLIENT_MSG::CANCEL_FILE_TRANSFER, NULL, 0);
 }
