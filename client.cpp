@@ -127,8 +127,7 @@ int main(int argc, char* argv[])
         scanf("%hd", &msgCode);
         switch (msgCode)
         {
-        case CLIENT_MSG::SERVER_INFO:
-        case CLIENT_MSG::CLIENT_INFO:
+        case CLIENT_MSG::ASK_SERVER_INFO:
         case CLIENT_MSG::LOGOUT:
         case CLIENT_MSG::DIR_PWD:
             len = 0;
@@ -389,7 +388,7 @@ void downloadFile(FILE* file, uint32_t blockCount)
     } Buffer;
     uint32_t range[2] = {0, htonl(blockCount)};
     sendMessage(CLIENT_MSG::ASK_BLOCK_RANGE, (char*)range, sizeof(range));
-    int i;
+    unsigned i;
     uint8_t* blocks = (uint8_t*)malloc(blockCount); // 1 - bad, 0 - good
     uint8_t md5Res[MD5_DIGEST_LENGTH];
     int flag = 1;
